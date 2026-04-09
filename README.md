@@ -2,7 +2,11 @@
 
 ## Overview
 
-Ralph Town is a locally-run autonomous coding system designed to handle complex engineering tasks without cloud dependencies or human supervision during execution. Built by Joe Sebastian to decompose product requirements into phased subtasks and execute them overnight using a local LLM — review and fix bugs in the morning.
+Ralph Town is a locally-run autonomous coding system designed to handle complex engineering tasks without cloud dependencies or human supervision during execution. Feed it a PRD, and a local LLM decomposes it into phased subtasks — review and fix bugs in the morning.
+
+**Problem Addressed:** Interactive AI coding sessions incur continuous cloud API costs and require babysitting, whereas overnight batch work needs no such constraints.
+
+**Workflow:** A structured GOAL.md file triggers a "Mayor Plan" that decomposes tasks into phases, each executing in isolated Git worktrees with RAG-injected codebase context.
 
 **Early validation across 4 module PRDs: 50–65% of generated code passed initial review with minor fixes, running entirely on local hardware with zero API cost.**
 
