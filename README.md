@@ -20,7 +20,7 @@ No cloud dependency during execution. No supervision required.
 
 ## Why I Built This
 
-I run a Magento 2 e-commerce project alongside a Node.js bot platform. Both have large, interconnected codebases where a single bad change cascades. I needed a coding assistant that could:
+I run a Magento 2 e-commerce project alongside a Node.js platform. Both have large, interconnected codebases where a single bad change cascades. I needed a coding assistant that could:
 
 - Work through a multi-hour task without me watching
 - Understand the codebase structure before writing code (not just guess)
