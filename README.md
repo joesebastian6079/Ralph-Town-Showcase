@@ -81,6 +81,23 @@ Before any write operation, the safety layer checks:
 - Automatic file backups before overwrites
 - Branch protection — never commits to main without explicit approval
 
+## Morning Review — `/ralph-review`
+
+The overnight system deliberately doesn't auto-commit. In the morning, a single command hands off to regular Claude (cloud) for human-in-the-loop review before anything lands in git.
+
+**`/ralph-review`** is a custom Claude Code skill that:
+1. Reads `plan.json` and `completed.json` — shows what the goal was and what got done
+2. Runs `git diff --stat` and `git log` — surfaces all changed files
+3. Lists `.proposed` files (critical-module changes held for approval) and active git worktrees
+4. Walks through each diff, asking for sign-off before moving on
+5. On approval — applies staged changes, prunes stale worktrees, cleans up temp files, and commits
+
+The local model (Ralph) is explicitly blocked from running `/ralph-review` on itself. The review step only runs when a human opens Claude Code in the morning and invokes it.
+
+This keeps the human in the loop on every overnight run without requiring them to watch it happen.
+
+---
+
 ## Tradeoffs & Decisions
 
 **Local inference over cloud for execution** — Qwen3-8B via vLLM-MLX is slower than GPT-4 but runs at zero marginal cost. For overnight batch work, speed doesn't matter. Cost does.
