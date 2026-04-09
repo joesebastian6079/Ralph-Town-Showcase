@@ -1,35 +1,12 @@
-# Ralph Town
+# Ralph Town — Autonomous Overnight Coding System
 
-## The Problem
+## Overview
 
-AI coding tools are powerful in short bursts — but complex engineering tasks (refactors, module builds, migrations) take hours of back-and-forth. Running these interactively means paying cloud API rates for every token, babysitting the session, and losing the time you could be sleeping.
+Ralph Town is a locally-run autonomous coding system designed to handle complex engineering tasks without cloud dependencies or human supervision during execution. Built by Joe Sebastian to decompose product requirements into phased subtasks and execute them overnight using a local LLM — review and fix bugs in the morning.
 
-I needed a way to hand off a product requirement at night and wake up to working code.
-
-## The Solution
-
-An autonomous overnight coding system: feed it a PRD (`GOAL.md`), and a local LLM decomposes it into phased subtasks, executes each phase with RAG-powered codebase context, verifies output through a self-checking quality layer, and applies safety rails before touching anything critical.
-
-No cloud dependency during execution. No supervision required.
+**Early validation across 4 module PRDs: 50–65% of generated code passed initial review with minor fixes, running entirely on local hardware with zero API cost.**
 
 ---
-
-**Tech Stack:** Bash – Python – vLLM-MLX – Qwen3-8B – nomic-embed-text – PHPStan – Docker – Git Worktrees
-
----
-
-## Why I Built This
-
-I run a Magento 2 e-commerce project alongside a Node.js platform. Both have large, interconnected codebases where a single bad change cascades. I needed a coding assistant that could:
-
-- Work through a multi-hour task without me watching
-- Understand the codebase structure before writing code (not just guess)
-- Catch its own mistakes before I reviewed in the morning
-- Never touch critical files without explicit scope
-
-Existing tools either required cloud APIs (expensive at scale), didn't maintain codebase context across phases, or had no safety mechanisms for autonomous runs.
-
-So I built something that did all of it locally.
 
 ## How It Works
 
@@ -37,89 +14,92 @@ So I built something that did all of it locally.
 GOAL.md (PRD)
      │
      ▼
-Mayor Plan — decomposes the PRD into phased subtasks with scoped git worktrees
-     │
-     ▼
-RAG Pipeline — indexes codebase structure via nomic-embed-text,
-               injects targeted context into each worker iteration
-     │
-     ▼
-vLLM-MLX Executor (Qwen3-8B) — executes each phase locally, overnight
-     │
-     ▼
-Chain of Verification (CoVe) — 5-question self-verification loop per output
-PHPStan Static Analysis — error-fed retry loops until clean
-     │
-     ▼
-Safety Rails — scan before committing anything
+┌─────────────┐
+│  Mayor Plan │  ← Decomposes PRD into phased subtasks
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────────┐
+│  Git Worktree (x N) │  ← Each phase runs in isolation
+│  + RAG Context      │  ← nomic-embed-text injects codebase context
+│  + Qwen3-8B (local) │  ← vLLM-MLX, no cloud calls
+└──────┬──────────────┘
+       │
+       ▼
+┌──────────────────────┐
+│  Verification Layer  │
+│  • CoVe (5 questions)│
+│  • PHPStan analysis  │
+│  • Safety rails      │
+└──────┬───────────────┘
+       │
+       ▼
+┌──────────────────┐
+│  /ralph-review   │  ← Morning review: diff, approve, commit
+└──────────────────┘
 ```
-
-## System Architecture
-
-**PRD-to-Plan decomposition**
-The system reads a structured `GOAL.md` brief (objective, scope, constraints, success criteria) and decomposes it into phased subtasks. Each phase gets its own git worktree — isolated branches prevent phases from contaminating each other.
-
-**RAG-powered context**
-A custom Python RAG pipeline using `nomic-embed-text` indexes the codebase before execution starts. Each worker iteration gets relevant context injected — not just file names, but semantically matched code sections. This significantly improves generation accuracy on large, unfamiliar codebases.
-
-**Local inference**
-Execution runs entirely on-device via `vLLM-MLX` with `Qwen3-8B`. No cloud API calls during the overnight run. Planning uses Claude API (~$1/session); execution is free.
-
-## Quality & Safety
-
-**Chain of Verification (CoVe)**
-Every generated output goes through a 5-question self-verification loop before being accepted. The model interrogates its own output — checking logic, scope adherence, edge cases — and retries if verification fails.
-
-**PHPStan static analysis**
-For PHP codebases (Magento 2), PHPStan runs automatically after each phase. Errors are fed back into the retry loop. The system doesn't move to the next phase until static analysis passes.
-
-**Production safety rails**
-Before any write operation, the safety layer checks:
-- Critical module detection (core files, payment modules, auth)
-- Change ratio limits (flags if a phase modifies too large a % of the codebase)
-- Dangerous pattern scanning (DROP TABLE, rm -rf, etc.)
-- Automatic file backups before overwrites
-- Branch protection — never commits to main without explicit approval
-
-## Morning Review — `/ralph-review`
-
-The overnight system deliberately doesn't auto-commit. In the morning, a single command hands off to regular Claude (cloud) for human-in-the-loop review before anything lands in git.
-
-**`/ralph-review`** is a custom Claude Code skill that:
-1. Reads `plan.json` and `completed.json` — shows what the goal was and what got done
-2. Runs `git diff --stat` and `git log` — surfaces all changed files
-3. Lists `.proposed` files (critical-module changes held for approval) and active git worktrees
-4. Walks through each diff, asking for sign-off before moving on
-5. On approval — applies staged changes, prunes stale worktrees, cleans up temp files, and commits
-
-The local model (Ralph) is explicitly blocked from running `/ralph-review` on itself. The review step only runs when a human opens Claude Code in the morning and invokes it.
-
-This keeps the human in the loop on every overnight run without requiring them to watch it happen.
 
 ---
 
-## Tradeoffs & Decisions
+## Core Stack
 
-**Local inference over cloud for execution** — Qwen3-8B via vLLM-MLX is slower than GPT-4 but runs at zero marginal cost. For overnight batch work, speed doesn't matter. Cost does.
+| Component | Tool |
+|-----------|------|
+| Inference | vLLM-MLX + Qwen3-8B (local) |
+| Embeddings | nomic-embed-text |
+| Static Analysis | PHPStan |
+| Isolation | Git Worktrees |
+| Orchestration | Bash + Python |
+| Containers | Docker |
 
-**Git worktrees over branches** — Each phase in an isolated worktree means failures in phase 3 don't affect the committed state from phase 1 or 2. Rollback is clean.
+---
 
-**RAG over full-context loading** — Full codebase context exceeds local model context windows. Semantic retrieval gives the model what it actually needs per-task rather than flooding it with irrelevant code.
+## Quality & Safety Mechanisms
 
-**CoVe over external reviewer** — Self-verification is slower than just committing, but it catches a surprisingly high number of off-scope or logically broken outputs before they hit the review queue.
+- **Chain of Verification (CoVe):** Self-interrogation loop with five verification questions per output before acceptance
+- **Static Analysis:** PHPStan automatically validates PHP code and feeds errors back into retry loops
+- **Safety Rails:** Critical module detection, change ratio limits, dangerous pattern scanning, automatic file backups, and branch protection
 
-## What I Learned
+---
 
-– Local models are good enough for scoped, well-specified tasks. The bottleneck isn't model capability — it's context quality. The RAG pipeline mattered more than the model choice.
+## Human-in-the-Loop Review
 
-– Safety rails are load-bearing, not optional. The first version had no change ratio limits. It once modified 60% of a module's files in a single phase because the scope in GOAL.md was ambiguous.
+Rather than auto-committing, the system stages all changes for morning review via `/ralph-review` — a Claude Code skill that diffs changes, compares planned vs. completed work, and requires explicit approval before applying anything to the main branch.
 
-– Verification loops add time but reduce morning review time by more than they cost. The CoVe layer typically catches 2–3 bad outputs per overnight session that would otherwise land in my review queue.
+No overnight supervision needed. Just review in the morning.
 
-– Decomposing PRDs into phased subtasks is the hardest part of the system — not the execution. Ambiguous goals produce bad plans. The GOAL.md format exists to force specificity before the session starts.
+---
 
-## Status
+## Example GOAL.md (sanitized)
 
-Active and in use on Magento 2 and Node.js projects. Source code is private.
+```markdown
+# GOAL.md — User Auth Module
 
-Built by [Joe Sebastian](https://linkedin.com/in/joesebastian) — PM/PgM building at the intersection of product and engineering.
+## Objective
+Implement JWT-based authentication for the admin panel.
+
+## Phases
+1. Create AuthService class with login/logout/refresh methods
+2. Add middleware for route protection
+3. Write PHPStan-compatible type hints throughout
+4. Add unit test stubs for each public method
+
+## Constraints
+- Do not modify existing UserModel
+- All new files go in /src/Auth/
+- Follow existing PSR-12 coding standards
+```
+
+---
+
+## Design Decisions
+
+- **Local inference over cloud APIs** — slower but zero per-token cost; overnight batch work makes latency irrelevant
+- **Semantic retrieval over full-context loading** — RAG injects targeted codebase context per phase rather than overloading the context window
+- **Verification loops** — catch bad outputs (CoVe flags ~2–3 per overnight session) before human review, not after
+
+---
+
+## Current Status
+
+Actively deployed on Magento 2 and Node.js projects (source code private — active development). Built and maintained by [Joe Sebastian](https://github.com/joesebastian6079).
