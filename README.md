@@ -49,7 +49,7 @@ GOAL.md (PRD)
 
 | Component | Tool |
 |-----------|------|
-| Inference | vLLM-MLX + Qwen3-8B (local) |
+| Inference | MLX (mlx-lm) + mlx-community/Qwen3-8B-4bit (local) |
 | Embeddings | nomic-embed-text |
 | Static Analysis | PHPStan |
 | Isolation | Git Worktrees |
